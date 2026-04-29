@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+data/test_tracks/*.wav
+data/test_tracks/*.mp3
+data/test_tracks/*.flac
+!data/test_tracks/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Poetry (if we add it later)
+poetry.lock
+
+# Logs
+*.log

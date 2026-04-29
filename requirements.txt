@@ -1,0 +1,11 @@
+# Phase 1: Schema Validation and Testing
+pydantic==2.7.1
+pytest==8.1.1
+pytest-cov==5.0.0
+
+# Phase 2 dependencies (to be added later):
+# demucs
+# librosa
+# pyrubberband
+# tensorflow/torch
+# anthropic/openai
