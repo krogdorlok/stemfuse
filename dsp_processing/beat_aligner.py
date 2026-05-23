@@ -9,7 +9,7 @@ def detect_tempo(audio_path: str) -> float:
     """Detect tempo in BPM from audio file."""
     y, sr = librosa.load(audio_path, sr=44100)
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    return float(tempo.item())
+    return float(tempo.item() if hasattr(tempo, 'item') else tempo)
 
 
 def time_stretch(audio_path: str, output_path: str, target_bpm: float) -> float:
