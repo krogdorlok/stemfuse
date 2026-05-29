@@ -36,3 +36,4 @@ poetry.lock
 
 # Logs
 *.log
+.cache/
