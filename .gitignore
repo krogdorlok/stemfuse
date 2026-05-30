@@ -37,3 +37,6 @@ poetry.lock
 # Logs
 *.log
 .cache/
+
+# Local documentation
+CLAUDE.md
