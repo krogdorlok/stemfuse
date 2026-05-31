@@ -1,7 +1,16 @@
-"""Natural language parser for music prompts."""
+"""Natural language parser for music prompts using LLM."""
 
+import os
+import json
 from typing import Optional
+from pathlib import Path
 from pydantic import ValidationError
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+    print("Warning: openai package not installed. Run: pip install openai")
 
 from schemas.dsp_parameters import (
     StemType,
@@ -14,10 +23,66 @@ from schemas.dsp_parameters import (
 )
 
 
+# Load system prompt
+SYSTEM_PROMPT_PATH = Path(__file__).parent / "system_prompt.md"
+with open(SYSTEM_PROMPT_PATH, 'r') as f:
+    SYSTEM_PROMPT = f.read()
+
+
+def _get_llm_client():
+    """Initialize LLM client from environment variables."""
+    if OpenAI is None:
+        raise ImportError("openai package not installed")
+
+    # Try GLM-5 first (Zhipu AI, OpenAI-compatible)
+    api_key = os.getenv("GLM_API_KEY")
+    base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4/")
+
+    # Fallback to OpenAI
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+        base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+
+    if not api_key:
+        raise ValueError(
+            "No API key found. Set GLM_API_KEY or OPENAI_API_KEY environment variable."
+        )
+
+    return OpenAI(api_key=api_key, base_url=base_url)
+
+
+def _call_llm(prompt: str, model: str = "glm-4-flash") -> str:
+    """
+    Call LLM with the system prompt and user prompt.
+
+    Args:
+        prompt: User's natural language request
+        model: Model name (default: glm-4-flash for GLM-5)
+
+    Returns:
+        Raw JSON string from LLM
+    """
+    client = _get_llm_client()
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.3,  # Lower temperature for consistent JSON output
+        max_tokens=1000,
+    )
+
+    return response.choices[0].message.content
+
+
 def parse_prompt(
     prompt: str,
     input_path: str,
-    output_path: str
+    output_path: str,
+    use_llm: bool = True,
+    model: str = "glm-4-flash"
 ) -> Optional[OrchestrationRequest]:
     """
     Parse natural language prompt into orchestration request.
@@ -26,6 +91,8 @@ def parse_prompt(
         prompt: Natural language description (e.g., "Make drums jazzy with 60% fusion")
         input_path: Path to input audio file
         output_path: Path for output audio file
+        use_llm: If True, use actual LLM; if False, use keyword extraction (fallback)
+        model: Model name for LLM call
 
     Returns:
         Validated OrchestrationRequest or None if parsing fails
@@ -35,9 +102,25 @@ def parse_prompt(
         >>> parse_prompt("Tempo up 20%, bass down 3dB", "input.mp3", "output.wav")
     """
     try:
-        # For now, use simple keyword matching
-        # In Phase 4b, replace with actual LLM call
-        transformations = _extract_transformations(prompt)
+        if use_llm:
+            # Use actual LLM
+            llm_output = _call_llm(prompt, model=model)
+            # Parse JSON from LLM output
+            try:
+                llm_json = json.loads(llm_output)
+            except json.JSONDecodeError:
+                # LLM might have wrapped in markdown fences
+                if "```json" in llm_output:
+                    llm_output = llm_output.split("```json")[1].split("```")[0].strip()
+                elif "```" in llm_output:
+                    llm_output = llm_output.split("```")[1].split("```")[0].strip()
+                llm_json = json.loads(llm_output)
+
+            transformations_data = llm_json.get("stem_transformations", [])
+            transformations = [StemTransformation(**t) for t in transformations_data]
+        else:
+            # Fallback to keyword extraction
+            transformations = _extract_transformations(prompt)
 
         # Create orchestration request
         request = OrchestrationRequest(
@@ -54,17 +137,20 @@ def parse_prompt(
 
         return request
 
-    except (ValidationError, ValueError) as e:
+    except (ValidationError, ValueError, json.JSONDecodeError) as e:
         print(f"Parse error: {e}")
         return None
+    except Exception as e:
+        print(f"LLM error: {e}")
+        print("Falling back to keyword extraction...")
+        return parse_prompt(prompt, input_path, output_path, use_llm=False)
 
 
 def _extract_transformations(prompt: str) -> list[StemTransformation]:
     """
     Extract stem transformations from prompt using keyword matching.
 
-    This is a placeholder for LLM-based parsing.
-    Phase 4b will replace this with actual LLM integration.
+    This is a fallback when LLM is not available.
     """
     prompt_lower = prompt.lower()
     transformations = []

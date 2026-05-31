@@ -38,5 +38,9 @@ poetry.lock
 *.log
 .cache/
 
+# Environment variables
+.env
+.env.local
+
 # Local documentation
 CLAUDE.md
