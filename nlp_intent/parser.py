@@ -36,7 +36,7 @@ def _get_llm_client():
 
     # Try GLM-5 first (Zhipu AI, OpenAI-compatible)
     api_key = os.getenv("GLM_API_KEY")
-    base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4/")
+    base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
 
     # Fallback to OpenAI
     if not api_key:
