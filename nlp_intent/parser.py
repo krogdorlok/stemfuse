@@ -34,35 +34,50 @@ def _get_llm_client():
     if OpenAI is None:
         raise ImportError("openai package not installed")
 
-    # Try GLM-5 first (Zhipu AI, OpenAI-compatible)
-    api_key = os.getenv("GLM_API_KEY")
-    base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
+    # Try Gemini first (Google)
+    api_key = os.getenv("GEMINI_API_KEY")
+    base_url = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
+    model_default = "gemini-2.0-flash-exp"
+
+    if not api_key:
+        api_key = os.getenv("HF_API_KEY")
+        base_url = "https://api-inference.huggingface.co/v1/"
+        model_default = "mistralai/Mistral-7B-Instruct-v0.2"
+
+    # Try GLM-5 second (Zhipu AI, OpenAI-compatible)
+    if not api_key:
+        api_key = os.getenv("GLM_API_KEY")
+        base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
+        model_default = "glm-4-plus"
 
     # Fallback to OpenAI
     if not api_key:
         api_key = os.getenv("OPENAI_API_KEY")
         base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        model_default = "gpt-4o"
 
     if not api_key:
         raise ValueError(
-            "No API key found. Set GLM_API_KEY or OPENAI_API_KEY environment variable."
+            "No API key found. Set GEMINI_API_KEY, GLM_API_KEY, or OPENAI_API_KEY environment variable."
         )
 
-    return OpenAI(api_key=api_key, base_url=base_url)
+    return OpenAI(api_key=api_key, base_url=base_url), model_default
 
 
-def _call_llm(prompt: str, model: str = "glm-4-plus") -> str:
+def _call_llm(prompt: str, model: str = None) -> str:
     """
     Call LLM with the system prompt and user prompt.
 
     Args:
         prompt: User's natural language request
-        model: Model name (default: glm-4-plus for GLM-5)
+        model: Model name (auto-detected from env if not specified)
 
     Returns:
         Raw JSON string from LLM
     """
-    client = _get_llm_client()
+    client, default_model = _get_llm_client()
+    if model is None:
+        model = default_model
 
     response = client.chat.completions.create(
         model=model,
@@ -82,7 +97,7 @@ def parse_prompt(
     input_path: str,
     output_path: str,
     use_llm: bool = True,
-    model: str = "glm-4-flash"
+    model: str = None
 ) -> Optional[OrchestrationRequest]:
     """
     Parse natural language prompt into orchestration request.
