@@ -51,13 +51,13 @@ def _get_llm_client():
     return OpenAI(api_key=api_key, base_url=base_url)
 
 
-def _call_llm(prompt: str, model: str = "glm-4-flash") -> str:
+def _call_llm(prompt: str, model: str = "glm-4-plus") -> str:
     """
     Call LLM with the system prompt and user prompt.
 
     Args:
         prompt: User's natural language request
-        model: Model name (default: glm-4-flash for GLM-5)
+        model: Model name (default: glm-4-plus for GLM-5)
 
     Returns:
         Raw JSON string from LLM
