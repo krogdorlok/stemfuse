@@ -38,6 +38,9 @@ poetry.lock
 *.log
 .cache/
 
+# Output files
+output/
+
 # Environment variables
 .env
 .env.local
