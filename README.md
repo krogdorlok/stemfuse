@@ -108,6 +108,21 @@ All tests validate boundary conditions to prevent audio artifacts:
 
 Python 3.10+ (currently using 3.12.3)
 
+## Usage
+
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Run full pipeline with your audio file
+python test_full_pipeline.py <audio_file> "<prompt>"
+
+# Example:
+python test_full_pipeline.py "data/test_tracks/song.mp3" "make it soulful and soothing, go easy on the bass"
+```
+
+**Output:** `output/<song_name>_transformed/final_output.wav`
+
 ## License
 
 TBD
