@@ -13,16 +13,22 @@ Tests cover all critical bug fixes from Phase 5 DSP fix:
 """
 
 import numpy as np
+import pytest
 import soundfile as sf
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import dsp_processing.transform_engine as transform_engine_module
+import dsp_processing.mixer as mixer_module
 from dsp_processing.transform_engine import (
     apply_eq, apply_volume, apply_tempo_shift, apply_pitch_shift,
     apply_genre_preset, apply_transformation, apply_all_transformations
 )
-from schemas.dsp_parameters import StemType, GenreStyle, StemTransformation, EQAdjustment
+from schemas.dsp_parameters import (
+    StemType, GenreStyle, StemTransformation, EQAdjustment,
+    OrchestrationRequest, StemSeparationRequest
+)
 
 
 class TestApplyEQ:
@@ -429,3 +435,79 @@ class TestFlatEQBridge:
         """Without flat fields or eq_adjustment, eq_adjustment should be None."""
         t = StemTransformation(stem_type=StemType.OTHER)
         assert t.eq_adjustment is None
+
+
+def _make_click_track(duration_s: float = 4.5, sr: int = 44100, beat_interval_s: float = 0.5) -> np.ndarray:
+    """Synthetic click track: a short burst every beat_interval_s, silence between."""
+    audio = np.zeros(int(duration_s * sr))
+    click_len = int(0.02 * sr)  # 20ms burst per click
+    beat = 0.0
+    while beat < duration_s:
+        start = int(beat * sr)
+        end = min(start + click_len, len(audio))
+        audio[start:end] = 0.8
+        beat += beat_interval_s
+    return audio
+
+
+class TestTempoShiftUniformityInvariant:
+    """
+    Regression test for: tempo_shift applied to a subset of stems desyncs the
+    mix (mix_stems zero-pads length mismatches instead of time-aligning them,
+    so a stem sped up on its own drifts out of sync with the others for its
+    entire length, not just the tail).
+
+    Reproduced with a click-track: two stems with identical beat markers
+    every 0.5s, one compressed by the ratio a real tempo_shift=+0.2 produces.
+    Beat drift grew linearly (83ms at beat 1, 667ms by beat 8), and the
+    shifted stem went silent for the final ~17% of the track once it ran out
+    of samples. The fix (OrchestrationRequest.model_post_init) must reject
+    this request before it ever reaches apply_all_transformations/mix_stems.
+    """
+
+    def _build_click_track_stems(self, tmpdir):
+        stems = {}
+        for stem in ["vocals", "drums", "bass", "other"]:
+            audio = _make_click_track()
+            path = Path(tmpdir) / f"{stem}.wav"
+            sf.write(path, audio, 44100)
+            stems[stem] = str(path)
+        return stems
+
+    @patch('dsp_processing.mixer.mix_stems')
+    @patch('dsp_processing.transform_engine.apply_all_transformations')
+    def test_partial_tempo_shift_rejected_before_dsp_runs(self, mock_apply_all, mock_mix, tmp_path):
+        """
+        A request with tempo_shift on only the drums stem (a legitimate,
+        real request e.g. "speed up just the drums") must be rejected at
+        the schema layer, before apply_all_transformations or mix_stems
+        (the real DSP call path) ever run.
+        """
+        stems = self._build_click_track_stems(tmp_path)
+
+        with pytest.raises(ValueError, match="tempo_shift must be applied uniformly"):
+            request = OrchestrationRequest(
+                source_audio_path="clicktrack.wav",
+                separation_request=StemSeparationRequest(
+                    source_path="clicktrack.wav",
+                    output_dir=str(tmp_path)
+                ),
+                stem_transformations=[
+                    StemTransformation(stem_type=StemType.DRUMS, tempo_shift=0.2),
+                    StemTransformation(stem_type=StemType.VOCALS),
+                    StemTransformation(stem_type=StemType.BASS),
+                    StemTransformation(stem_type=StemType.OTHER),
+                ],
+                output_path=str(tmp_path / "output.wav")
+            )
+            # If validation somehow didn't raise, this would run the real
+            # DSP call path with the invalid, desyncing request. Called via
+            # module attribute (not the bare imported name) so the @patch
+            # decorators above actually intercept these calls.
+            transform_engine_module.apply_all_transformations(
+                stems, request.stem_transformations, str(tmp_path / "transformed")
+            )
+            mixer_module.mix_stems(stems, str(tmp_path / "output.wav"))
+
+        mock_apply_all.assert_not_called()
+        mock_mix.assert_not_called()

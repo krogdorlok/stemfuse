@@ -286,8 +286,21 @@ class OrchestrationRequest(BaseModel):
         """
         Validate orchestration request consistency.
 
-        Ensures each stem type appears at most once in transformations.
+        Ensures each stem type appears at most once in transformations, and
+        that any tempo_shift is applied uniformly across all four stems —
+        time-stretching only a subset desyncs the mix (mix_stems zero-pads
+        length mismatches instead of time-aligning them).
         """
         stem_types = [t.stem_type for t in self.stem_transformations]
         if len(stem_types) != len(set(stem_types)):
             raise ValueError("Duplicate stem types in stem_transformations")
+
+        shifted = {t.stem_type: t.tempo_shift for t in self.stem_transformations if t.tempo_shift is not None}
+        if shifted:
+            missing = set(StemType) - set(shifted.keys())
+            values = set(shifted.values())
+            if missing or len(values) > 1:
+                raise ValueError(
+                    "tempo_shift must be applied uniformly across all four stems "
+                    f"(missing: {sorted(s.value for s in missing)}, values found: {sorted(values)})"
+                )

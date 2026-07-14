@@ -310,6 +310,76 @@ class TestOrchestrationRequest:
                 output_path="/path/to/output.wav"
             )
 
+    def test_tempo_shift_partial_stems_fails(self):
+        """tempo_shift on only some stems fails (desyncs the mix)"""
+        with pytest.raises(ValueError, match="tempo_shift must be applied uniformly"):
+            OrchestrationRequest(
+                source_audio_path="/path/to/song.mp3",
+                separation_request=StemSeparationRequest(
+                    source_path="/path/to/song.mp3",
+                    output_dir="/path/to/stems"
+                ),
+                stem_transformations=[
+                    StemTransformation(stem_type=StemType.DRUMS, tempo_shift=0.2),
+                    StemTransformation(stem_type=StemType.VOCALS),
+                    StemTransformation(stem_type=StemType.BASS),
+                    StemTransformation(stem_type=StemType.OTHER),
+                ],
+                output_path="/path/to/output.wav"
+            )
+
+    def test_tempo_shift_all_four_mismatched_fails(self):
+        """tempo_shift present on all four stems but with different values fails"""
+        with pytest.raises(ValueError, match="tempo_shift must be applied uniformly"):
+            OrchestrationRequest(
+                source_audio_path="/path/to/song.mp3",
+                separation_request=StemSeparationRequest(
+                    source_path="/path/to/song.mp3",
+                    output_dir="/path/to/stems"
+                ),
+                stem_transformations=[
+                    StemTransformation(stem_type=StemType.DRUMS, tempo_shift=0.2),
+                    StemTransformation(stem_type=StemType.VOCALS, tempo_shift=0.1),
+                    StemTransformation(stem_type=StemType.BASS, tempo_shift=0.2),
+                    StemTransformation(stem_type=StemType.OTHER, tempo_shift=0.2),
+                ],
+                output_path="/path/to/output.wav"
+            )
+
+    def test_tempo_shift_all_four_uniform_succeeds(self):
+        """tempo_shift present on all four stems with the identical value succeeds"""
+        req = OrchestrationRequest(
+            source_audio_path="/path/to/song.mp3",
+            separation_request=StemSeparationRequest(
+                source_path="/path/to/song.mp3",
+                output_dir="/path/to/stems"
+            ),
+            stem_transformations=[
+                StemTransformation(stem_type=StemType.DRUMS, tempo_shift=0.2),
+                StemTransformation(stem_type=StemType.VOCALS, tempo_shift=0.2),
+                StemTransformation(stem_type=StemType.BASS, tempo_shift=0.2),
+                StemTransformation(stem_type=StemType.OTHER, tempo_shift=0.2),
+            ],
+            output_path="/path/to/output.wav"
+        )
+        assert all(t.tempo_shift == 0.2 for t in req.stem_transformations)
+
+    def test_no_tempo_shift_succeeds(self):
+        """No tempo_shift set anywhere succeeds (nothing to validate)"""
+        req = OrchestrationRequest(
+            source_audio_path="/path/to/song.mp3",
+            separation_request=StemSeparationRequest(
+                source_path="/path/to/song.mp3",
+                output_dir="/path/to/stems"
+            ),
+            stem_transformations=[
+                StemTransformation(stem_type=StemType.DRUMS),
+                StemTransformation(stem_type=StemType.VOCALS),
+            ],
+            output_path="/path/to/output.wav"
+        )
+        assert all(t.tempo_shift is None for t in req.stem_transformations)
+
     def test_full_orchestration_request(self):
         """Complete orchestration request with all parameters"""
         eq = EQAdjustment(low_gain=-3.0, high_gain=6.0)
@@ -325,7 +395,8 @@ class TestOrchestrationRequest:
                 StemTransformation(
                     stem_type=StemType.VOCALS,
                     target_genre=GenreStyle.NEUTRAL,
-                    volume_db=-2.0
+                    volume_db=-2.0,
+                    tempo_shift=0.1
                 ),
                 StemTransformation(
                     stem_type=StemType.DRUMS,
@@ -337,12 +408,14 @@ class TestOrchestrationRequest:
                 StemTransformation(
                     stem_type=StemType.BASS,
                     target_genre=GenreStyle.FUNK,
-                    pitch_shift_semitones=-2
+                    pitch_shift_semitones=-2,
+                    tempo_shift=0.1
                 ),
                 StemTransformation(
                     stem_type=StemType.OTHER,
                     target_genre=GenreStyle.METAL,
-                    genre_blend_ratio=0.4
+                    genre_blend_ratio=0.4,
+                    tempo_shift=0.1
                 )
             ],
             mix_parameters=MixParameters(
