@@ -115,10 +115,12 @@ Python 3.10+ (currently using 3.12.3)
 source venv/bin/activate
 
 # Run full pipeline with your audio file
-python test_full_pipeline.py <audio_file> "<prompt>"
+python pipeline.py <audio_file> "<prompt>"
 
 # Example:
-python test_full_pipeline.py "data/test_tracks/song.mp3" "make it soulful and soothing, go easy on the bass"
+python pipeline.py "data/test_tracks/song.mp3" "make it soulful and soothing, go easy on the bass"
+
+# Or run interactively (no args) for prompted input
 ```
 
 **Output:** `output/<song_name>_transformed/final_output.wav`
