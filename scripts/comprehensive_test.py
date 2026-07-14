@@ -1,7 +1,10 @@
 """Comprehensive test suite for StemFuse pipeline."""
 
 import os
+import sys
 import time
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from separation.stem_separator import separate
 from dsp_processing.mixer import mix_stems
 from dsp_processing.beat_aligner import detect_tempo, time_stretch
@@ -134,7 +137,7 @@ class ComprehensiveTest:
 
             for desc, volumes in configurations:
                 try:
-                    output_file = f'{output_dir}/mix_{desc.replace(' ', '_')}.wav'
+                    output_file = f'{output_dir}/mix_{desc.replace(" ", "_")}.wav'
                     mix_stems(separated, output_file, volumes)
 
                     if os.path.exists(output_file):
