@@ -64,10 +64,19 @@ def run_pipeline(input_file: str, prompt: str, output_file: str) -> str:
     transformed = apply_all_transformations(stems, request.stem_transformations, transformed_dir)
     print(f"   [PASS] Transformed {len(transformed)} stems")
 
-    # Mix output. volumes defaults to None (unity gain) - per-stem gain is
-    # already baked into `transformed` above.
+    # Mix output. `volumes` here carries mix_parameters.stem_weights - a
+    # balance-mixing knob, distinct from per-stem volume_db (already baked
+    # into `transformed` above, so it does not also go through `volumes`).
     print("\n[Step 4] Mixing stems...")
-    mix_stems(transformed, output_file, master_volume_db=-3.0)
+    stem_weights = {
+        stem_type.value: weight
+        for stem_type, weight in request.mix_parameters.stem_weights.items()
+    }
+    mix_stems(
+        transformed, output_file,
+        volumes=stem_weights,
+        master_volume_db=request.mix_parameters.master_volume_db
+    )
     print("   [PASS] Mixed output")
 
     return output_file

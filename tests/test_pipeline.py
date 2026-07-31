@@ -16,7 +16,8 @@ from unittest.mock import patch
 
 import pipeline
 from schemas.dsp_parameters import (
-    StemType, StemTransformation, OrchestrationRequest, StemSeparationRequest
+    StemType, StemTransformation, OrchestrationRequest, StemSeparationRequest,
+    MixParameters
 )
 
 SR = 44100
@@ -108,3 +109,41 @@ class TestVolumeAppliedOnce:
             f"delivered {delivered_db:.2f}dB, requested -3.0dB "
             "(if this is roughly double, volume_db is being applied twice)"
         )
+
+
+class TestMixParametersPassthrough:
+    """
+    Regression test for: mix_parameters is built by parse_prompt() on every
+    request (real defaults: master_volume_db=-3.0, stem_weights={}), but
+    pipeline.py never read it - it hardcoded master_volume_db=-3.0 directly
+    into the mix_stems() call regardless of what the request contained.
+    """
+
+    def test_master_volume_db_from_request_not_hardcoded(self, tmp_path):
+        stems_dir = tmp_path / "stems"
+        stems_dir.mkdir()
+        stems, _ = _write_synthetic_stems(stems_dir)
+
+        request = OrchestrationRequest(
+            source_audio_path="input.wav",
+            separation_request=StemSeparationRequest(
+                source_path="input.wav", output_dir=str(tmp_path)
+            ),
+            stem_transformations=[
+                StemTransformation(stem_type=StemType.VOCALS),
+                StemTransformation(stem_type=StemType.DRUMS),
+                StemTransformation(stem_type=StemType.BASS),
+                StemTransformation(stem_type=StemType.OTHER),
+            ],
+            mix_parameters=MixParameters(master_volume_db=-10.0),
+            output_path=str(tmp_path / "output.wav"),
+        )
+        output_file = str(tmp_path / "output.wav")
+
+        with patch("pipeline.parse_prompt", return_value=request), \
+             patch("pipeline.separate", return_value=stems):
+            pipeline.run_pipeline("input.wav", "irrelevant prompt", output_file)
+
+        mixed, sr = sf.read(output_file)
+        peak_db = 20 * np.log10(np.max(np.abs(mixed)))
+        assert abs(peak_db - (-10.0)) < 0.5, f"peak {peak_db:.2f}dB, expected -10.0dB (not -3.0dB default)"
