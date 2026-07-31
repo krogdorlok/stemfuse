@@ -5,9 +5,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
-load_dotenv()
-
 from nlp_intent.parser import parse_prompt
+
+load_dotenv()
 
 # 100 exhaustive tests covering all system prompt capabilities
 TESTS = [
