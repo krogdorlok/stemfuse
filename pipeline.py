@@ -20,6 +20,59 @@ from dsp_processing.transform_engine import apply_all_transformations  # noqa: E
 from dsp_processing.mixer import mix_stems  # noqa: E402
 
 
+def run_pipeline(input_file: str, prompt: str, output_file: str) -> str:
+    """
+    Parse prompt, separate stems, apply transformations, mix. Returns output path.
+
+    per-stem volume_db is baked into each transformed stem file by
+    apply_all_transformations()/apply_transformation() already - mix_stems()
+    must NOT be given a second volumes dict built from the same values, or
+    the gain gets applied twice.
+    """
+    output_dir = Path(output_file).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Parse natural language prompt
+    print("\n[Step 1] Parsing natural language...")
+    request = parse_prompt(prompt, input_file, output_file)
+
+    if not request:
+        raise RuntimeError("Failed to parse prompt")
+
+    print("   [PASS] Parsed transformations:")
+    for t in request.stem_transformations:
+        parts = []
+        if t.target_genre:
+            parts.append(f"genre={t.target_genre.value}")
+        if t.tempo_shift is not None:
+            parts.append(f"tempo={t.tempo_shift:+.0%}")
+        if t.pitch_shift_semitones is not None:
+            parts.append(f"pitch={t.pitch_shift_semitones:+d}st")
+        if t.volume_db is not None:
+            parts.append(f"vol={t.volume_db}dB")
+        print(f"      - {t.stem_type.value}: {', '.join(parts) if parts else 'no changes'}")
+
+    # Separate stems
+    print("\n[Step 2] Separating stems...")
+    stems_dir = str(output_dir.parent / "stems")
+    stems = separate(input_file, stems_dir)
+    print(f"   [PASS] Separated {len(stems)} stems")
+
+    # Apply transformations
+    print("\n[Step 3] Applying transformations...")
+    transformed_dir = str(output_dir.parent / "transformed")
+    transformed = apply_all_transformations(stems, request.stem_transformations, transformed_dir)
+    print(f"   [PASS] Transformed {len(transformed)} stems")
+
+    # Mix output. volumes defaults to None (unity gain) - per-stem gain is
+    # already baked into `transformed` above.
+    print("\n[Step 4] Mixing stems...")
+    mix_stems(transformed, output_file, master_volume_db=-3.0)
+    print("   [PASS] Mixed output")
+
+    return output_file
+
+
 def main():  # Run StemFuse pipeline, either scripted (argv) or interactive
     print("=" * 60)
     print("StemFuse - Semantic Audio Orchestrator")
@@ -49,56 +102,12 @@ def main():  # Run StemFuse pipeline, either scripted (argv) or interactive
     if not output_file:
         output_file = f"output/{Path(input_file).stem}_transformed/final_output.wav"
 
-    # Create output directory
-    output_dir = Path(output_file).parent
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     print("\n" + "=" * 60)
     print("Processing...")
     print("=" * 60)
 
     try:
-        # Parse natural language prompt
-        print("\n[Step 1] Parsing natural language...")
-        request = parse_prompt(prompt, input_file, output_file)
-
-        if not request:
-            print("[ERROR] Failed to parse prompt")
-            sys.exit(1)
-
-        print("   [PASS] Parsed transformations:")
-        for t in request.stem_transformations:
-            parts = []
-            if t.target_genre:
-                parts.append(f"genre={t.target_genre.value}")
-            if t.tempo_shift is not None:
-                parts.append(f"tempo={t.tempo_shift:+.0%}")
-            if t.pitch_shift_semitones is not None:
-                parts.append(f"pitch={t.pitch_shift_semitones:+d}st")
-            if t.volume_db is not None:
-                parts.append(f"vol={t.volume_db}dB")
-            print(f"      - {t.stem_type.value}: {', '.join(parts) if parts else 'no changes'}")
-
-        # Separate stems
-        print("\n[Step 2] Separating stems...")
-        stems_dir = str(output_dir.parent / "stems")
-        stems = separate(input_file, stems_dir)
-        print(f"   [PASS] Separated {len(stems)} stems")
-
-        # Apply transformations
-        print("\n[Step 3] Applying transformations...")
-        transformed_dir = str(output_dir.parent / "transformed")
-        transformed = apply_all_transformations(stems, request.stem_transformations, transformed_dir)
-        print(f"   [PASS] Transformed {len(transformed)} stems")
-
-        # Mix output
-        print("\n[Step 4] Mixing stems...")
-        volumes = {}
-        for t in request.stem_transformations:
-            if t.volume_db is not None:
-                volumes[t.stem_type.value] = 10 ** (t.volume_db / 20.0)
-        mix_stems(transformed, output_file, volumes=volumes, master_volume_db=-3.0)
-        print("   [PASS] Mixed output")
+        output_file = run_pipeline(input_file, prompt, output_file)
 
         print("\n" + "=" * 60)
         print("[SUCCESS] Pipeline completed")

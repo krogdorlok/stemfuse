@@ -172,7 +172,7 @@ class ComprehensiveTest:
 def main():
     print_section("COMPREHENSIVE STEM FUSE TESTING")
     print("Testing all components across all test files")
-    print(f"Output directory: data/test_tracks/comprehensive_test/")
+    print("Output directory: data/test_tracks/comprehensive_test/")
 
     tester = ComprehensiveTest()
     tester.test_all_files_end_to_end()
