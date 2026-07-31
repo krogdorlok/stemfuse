@@ -191,6 +191,30 @@ class TestApplyPitchShift:
         result = apply_pitch_shift(audio, 44100, 24)  # Will be clamped to 12
         assert len(result) == len(audio)
 
+    @patch('dsp_processing.transform_engine.pyrb.pitch_shift')
+    def test_preserve_formants_forwarded_by_default(self, mock_pitch_shift):
+        """preserve_formants defaults to on and is forwarded as rubberband's --formant flag."""
+        mock_pitch_shift.return_value = np.zeros(44100)
+        audio = np.random.randn(44100)
+
+        apply_pitch_shift(audio, 44100, 5)
+
+        mock_pitch_shift.assert_called_once()
+        _, kwargs = mock_pitch_shift.call_args
+        assert kwargs.get('rbargs') == {'--formant': ''}
+
+    @patch('dsp_processing.transform_engine.pyrb.pitch_shift')
+    def test_preserve_formants_disabled_omits_flag(self, mock_pitch_shift):
+        """preserve_formants=False must not pass the --formant flag."""
+        mock_pitch_shift.return_value = np.zeros(44100)
+        audio = np.random.randn(44100)
+
+        apply_pitch_shift(audio, 44100, 5, preserve_formants=False)
+
+        mock_pitch_shift.assert_called_once()
+        _, kwargs = mock_pitch_shift.call_args
+        assert kwargs.get('rbargs') is None
+
 
 class TestApplyGenrePreset:
     """Test genre-specific EQ presets."""

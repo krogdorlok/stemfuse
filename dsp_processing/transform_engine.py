@@ -155,7 +155,7 @@ def apply_tempo_shift(audio: np.ndarray, sr: int, tempo_shift: float) -> np.ndar
     return pyrb.time_stretch(audio, sr, ratio)
 
 
-def apply_pitch_shift(audio: np.ndarray, sr: int, semitones: int) -> np.ndarray:
+def apply_pitch_shift(audio: np.ndarray, sr: int, semitones: int, preserve_formants: bool = True) -> np.ndarray:
     """
     Apply pitch shift in semitones.
 
@@ -163,6 +163,8 @@ def apply_pitch_shift(audio: np.ndarray, sr: int, semitones: int) -> np.ndarray:
         audio: Audio samples
         sr: Sample rate
         semitones: Pitch shift in semitones (-12 to 12)
+        preserve_formants: Keep the formant envelope unchanged (prevents
+            the "chipmunk effect"). On by default.
     """
     if semitones == 0:
         return audio
@@ -170,8 +172,10 @@ def apply_pitch_shift(audio: np.ndarray, sr: int, semitones: int) -> np.ndarray:
     # Clamp to prevent artifacts
     semitones = np.clip(semitones, -12, 12)
 
+    rbargs = {'--formant': ''} if preserve_formants else None
+
     # pyrubberband pitch shifting
-    return pyrb.pitch_shift(audio, sr, semitones)
+    return pyrb.pitch_shift(audio, sr, semitones, rbargs=rbargs)
 
 
 def apply_genre_preset(audio: np.ndarray, sr: int, stem_type: StemType,
