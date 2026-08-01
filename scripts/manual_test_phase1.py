@@ -7,6 +7,10 @@ This tests the "Translation Gap" - what happens when LLM outputs JSON.
 """
 
 import json
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from schemas.dsp_parameters import (
     StemType,
     GenreStyle,
@@ -58,7 +62,8 @@ def test_complex_orchestration():
             StemTransformation(
                 stem_type=StemType.VOCALS,
                 target_genre=GenreStyle.NEUTRAL,
-                volume_db=-2.0
+                volume_db=-2.0,
+                tempo_shift=0.1
             ),
             StemTransformation(
                 stem_type=StemType.DRUMS,
@@ -70,12 +75,14 @@ def test_complex_orchestration():
             StemTransformation(
                 stem_type=StemType.BASS,
                 target_genre=GenreStyle.FUNK,
-                pitch_shift_semitones=-2
+                pitch_shift_semitones=-2,
+                tempo_shift=0.1
             ),
             StemTransformation(
                 stem_type=StemType.OTHER,
                 target_genre=GenreStyle.METAL,
-                genre_blend_ratio=0.4
+                genre_blend_ratio=0.4,
+                tempo_shift=0.1
             )
         ],
         mix_parameters=MixParameters(
@@ -131,7 +138,7 @@ def test_invalid_parameters():
 
     for test in test_cases:
         try:
-            result = StemTransformation(**test["params"])
+            StemTransformation(**test["params"])
             if test["should_fail"]:
                 print(f"   ❌ {test['name']}: Should have failed but passed")
                 return False
@@ -171,7 +178,6 @@ def test_llm_json_simulation():
             {
                 "stem_type": "drums",
                 "target_genre": "jazz",
-                "tempo_shift": 0.15,
                 "genre_blend_ratio": 0.7
             }
         ],
@@ -192,7 +198,7 @@ def test_llm_json_simulation():
         # Validate against Pydantic schema
         req = OrchestrationRequest(**data)
 
-        print(f"   ✅ LLM JSON validated successfully")
+        print("   ✅ LLM JSON validated successfully")
         print(f"   Stems to process: {len(req.stem_transformations)}")
         print(f"   Target BPM: {req.beat_alignment.target_bpm}")
         return True
@@ -227,12 +233,12 @@ def test_llm_json_with_errors():
 
     try:
         data = json.loads(bad_llm_json)
-        req = OrchestrationRequest(**data)
-        print(f"   ❌ Should have failed but passed")
+        OrchestrationRequest(**data)
+        print("   ❌ Should have failed but passed")
         return False
 
     except ValidationError as e:
-        print(f"   ✅ Correctly caught invalid parameters:")
+        print("   ✅ Correctly caught invalid parameters:")
         print(f"      {str(e).split(chr(10))[0]}")  # First line of error
         return True
 
@@ -255,13 +261,13 @@ def test_boundary_values():
     for name, value in boundary_tests:
         try:
             if "tempo" in name.lower():
-                t = StemTransformation(stem_type="drums", tempo_shift=value)
+                StemTransformation(stem_type="drums", tempo_shift=value)
             elif "pitch" in name.lower():
-                t = StemTransformation(stem_type="vocals", pitch_shift_semitones=value)
+                StemTransformation(stem_type="vocals", pitch_shift_semitones=value)
             elif "volume" in name.lower():
-                t = StemTransformation(stem_type="bass", volume_db=value)
+                StemTransformation(stem_type="bass", volume_db=value)
             else:
-                t = StemTransformation(stem_type="other", genre_blend_ratio=value)
+                StemTransformation(stem_type="other", genre_blend_ratio=value)
             print(f"   ✅ {name}: {value}")
         except ValidationError:
             print(f"   ❌ {name}: {value} - Should have passed")

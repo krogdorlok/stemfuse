@@ -1,130 +1,85 @@
-# StemFuse - Semantic Audio Orchestrator
+# StemFuse — Semantic Audio Orchestrator
 
-**Phase:** 1 - Project Initialization ✅  
-**Status:** DSP Schemas and Validation Framework Complete
+Take an existing song, split it into stems, and reshape it with plain-English instructions — "make the drums hit harder with metal energy, give the bass a warm funk groove" — instead of manual EQ/tempo/pitch controls.
 
-## Project Goal
+```bash
+python pipeline.py "song.mp3" "make the drums 70% jazz fusion, give the bass a funk groove"
+```
 
-Build a **Semantic Audio Orchestrator** that:
-1. Takes an **existing song** (not generation)
-2. Separates it into **stems** (vocals, drums, bass, other)
-3. Applies **beat-perfect genre fusion** with natural language control
-4. Maintains **rhythmic coherence** (beat-synchronous alignment)
+## How it's different
 
-## Differentiation
+- **Suno / Udio** generate new songs. StemFuse transforms songs you already have.
+- **Moises** separates stems and gives you manual controls. StemFuse adds natural-language control on top.
+- **BandLab** is manual multi-track editing. StemFuse adds AI orchestration.
 
-- **Suno AI/Udio:** Generate new songs (we transform existing songs)
-- **Moises AI:** Stem separation + manual controls (we add semantic NL control)
-- **BandLab:** Multi-track editing (we add AI orchestration)
+## What works today
 
-## Three Pillars of Differentiation
+- **Stem separation** — Demucs splits a track into vocals / drums / bass / other.
+- **Natural language → DSP parameters** — a Groq-hosted LLM (Llama 3.3 70B) reads a prompt and produces structured, per-stem transformations; a keyword-matching fallback covers LLM/API failures.
+- **Pydantic validation boundary** — every LLM output is validated against bounded schemas (tempo ±50%, pitch ±12 semitones, EQ ±12dB, etc.) before it ever reaches the DSP engine, so a malformed or out-of-range instruction fails fast instead of corrupting audio.
+- **Per-stem DSP** — tempo shift, pitch shift (formant-preserving), genre-flavored EQ presets (11 genres), manual EQ, and volume, applied independently per stem, then mixed back together.
+- **80 automated tests**, `pytest` from repo root, 0 collection errors, runs in seconds. Covers schema validation, DSP correctness (verified against real transformed audio, not just mocks), and full pipeline orchestration.
 
-1. **Beat-perfect semantic fusion** - Automatic rhythmic alignment
-2. **Natural language stem control** - LLM + RAG interprets musical semantics
-3. **Genre fusion not transfer** - Per-stem genre blending: "60% metal + 40% jazz"
+## Roadmap / known limitations
 
-## Architecture
+- **Beat-grid alignment** — stems aren't yet aligned to a common BPM before transformation. `dsp_processing/beat_aligner.py` has working tempo-detection and time-stretch functions; wiring them into the main pipeline is the next planned step.
+- **Genre EQ is preset-based**, not model-driven — it's a real, audible effect but not full-fidelity genre transfer. No compression/saturation/reverb yet.
+- **Dynamic range compression** — the schema has a slot for it (`MixParameters.compression_threshold_db`); the compressor itself doesn't exist yet.
 
-### Phase 1 ✅ (Complete)
-- Pydantic DSP parameter schemas
-- Validation framework with bounded constraints
-- Unit test suite (37 tests, all passing)
-- Project structure initialized
+## Quick start
 
-### Phase 2 (Next)
-- Demucs stem separation integration
-- Librosa/pyrubberband beat alignment
-- Unified beat-grid architecture
+```bash
+git clone https://github.com/krogdorlok/stemfuse.git
+cd StemFuse
 
-### Phase 3
-- DSP mixing engine (EQ, volume, compression)
-- Hardcoded transformations (test DSP limits)
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-### Phase 4
-- LLM integration for semantic parsing
-- Natural language prompt → DSP parameters
-- Pydantic validation bridge
+brew install rubberband   # time-stretch/pitch-shift CLI dependency
 
-## Project Structure
+# .env in repo root:
+echo "GROQ_API_KEY=your_key_here" > .env
+echo "GROQ_MODEL=llama-3.3-70b-versatile" >> .env
+
+# Scripted:
+python pipeline.py "data/test_tracks/song.mp3" "make it soulful and soothing, go easy on the bass"
+
+# Or interactive (no args) for prompted input:
+python pipeline.py
+```
+
+Output lands at `output/<song_name>_transformed/final_output.wav`. First run downloads the ~2GB Demucs model.
+
+## Running the tests
+
+```bash
+pytest -v
+```
+
+80 tests, real assertions, no external dependencies (no audio files, no API key needed). Manual/integration scripts that *do* need real audio or a live API key live in `scripts/` and aren't part of the automated suite — run them directly, e.g. `python scripts/comprehensive_test.py`.
+
+## Project structure
 
 ```
 StemFuse/
-├── separation/          # Stem separation (Demucs)
-├── dsp_processing/      # Beat alignment, time-stretch, mixing
-├── nlp_intent/          # LLM integration
-├── tests/              # Unit/integration tests
-├── schemas/            # Pydantic DSP parameter schemas ✅
-├── data/
-│   └── test_tracks/    # User-provided audio files
-├── config/             # Configuration, constants
-├── venv/               # Virtual environment
-├── requirements.txt    # Dependencies ✅
-└── README.md
+├── separation/          # Demucs stem separation
+├── dsp_processing/      # Tempo/pitch shift, genre EQ, mixing
+├── nlp_intent/          # LLM prompt parsing (Groq) + system prompt
+├── schemas/             # Pydantic validation boundary between LLM and DSP
+├── tests/               # pytest suite (80 tests)
+├── scripts/             # Manual/integration checks - need real audio or a live API key
+├── data/test_tracks/    # Sample audio for local testing (not committed)
+├── pipeline.py           # Entry point: parse -> separate -> transform -> mix
+└── requirements.txt
 ```
 
-## Environment Setup
+## Design notes
 
-```bash
-# Activate virtual environment
-source venv/bin/activate
+**Validate at the boundary.** The LLM's job is to interpret intent; the Pydantic schema's job is to make sure nothing out-of-bounds ever reaches the audio engine, regardless of what the LLM says. This is the seam where "the LLM hallucinated a value" turns into a clean validation error instead of corrupted audio.
 
-# Run tests
-pytest tests/test_schemas.py -v
-```
-
-## Key Design Decisions
-
-### Pydantic Schemas Before LLM
-Prevents "Translation Gap" — LLM outputs validated against DSP bounds before processing.
-
-### Beat-Perfect Alignment as Moat
-Most remix tools ignore this → amateurish results. We use librosa/pyrubberband for unified beat grid.
-
-### Per-Stem Genre Fusion
-Different from simple "make everything jazz":
-```
-Vocals: Keep emotionally neutral
-Drums: Apply jazz swing (60%)
-Guitar: Apply metal aggression (40%)
-Bass: Apply reggae offbeat pattern
-```
-
-## Testing
-
-All tests validate boundary conditions to prevent audio artifacts:
-- Tempo: 60-200 BPM
-- Time-stretch: 0.5-2.0 ratio
-- Pitch shift: +/- 12 semitones
-- EQ: +/- 12 dB
-- Volume: -60 to 0 dB
-
-## Known Bottlenecks
-
-1. **Translation Gap** - LLM outputs → Pydantic validation → DSP engine
-2. **Audio Artifacts** - Demucs spectral bleeding, pyrubberband artifacts
-3. **Compute** - Modular architecture for async scaling
-
-## Python Version
-
-Python 3.10+ (currently using 3.12.3)
-
-## Usage
-
-```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Run full pipeline with your audio file
-python pipeline.py <audio_file> "<prompt>"
-
-# Example:
-python pipeline.py "data/test_tracks/song.mp3" "make it soulful and soothing, go easy on the bass"
-
-# Or run interactively (no args) for prompted input
-```
-
-**Output:** `output/<song_name>_transformed/final_output.wav`
+**Per-stem, not global, genre fusion.** "60% metal drums + 40% jazz bass" is a materially different (and harder) problem than "make the whole song metal" — each stem gets independent genre, tempo, pitch, and EQ treatment.
 
 ## License
 
-TBD
+MIT — see [LICENSE](LICENSE).
